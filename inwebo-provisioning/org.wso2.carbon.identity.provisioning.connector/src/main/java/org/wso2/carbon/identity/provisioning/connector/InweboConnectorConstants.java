@@ -46,4 +46,7 @@ public class InweboConnectorConstants {
     public static final String LAST_NAME_CLAIM = "http://wso2.org/claims/lastname";
     public static final String MAIL_CLAIM = "http://wso2.org/claims/emailaddress";
     public static final String PHONE_CLAIM = "http://wso2.org/claims/telephone";
+
+    public static final String PROFILE_CONFIGURATION = "profileConfiguration";
+    public static final String PROFILE_CONFIGURATION_DEFAULT = "default";
 }

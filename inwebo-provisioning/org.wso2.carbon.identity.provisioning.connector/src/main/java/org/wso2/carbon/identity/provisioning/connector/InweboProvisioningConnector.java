@@ -25,6 +25,7 @@ import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.identity.application.common.model.ClaimMapping;
 import org.wso2.carbon.identity.application.common.model.Property;
 import org.wso2.carbon.identity.base.IdentityConstants;
+import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.provisioning.ProvisioningOperation;
 import org.wso2.carbon.identity.provisioning.IdentityProvisioningException;
 import org.wso2.carbon.identity.provisioning.ProvisionedIdentifier;
@@ -32,11 +33,18 @@ import org.wso2.carbon.identity.provisioning.ProvisioningEntity;
 import org.wso2.carbon.identity.provisioning.ProvisioningEntityType;
 import org.wso2.carbon.identity.provisioning.AbstractOutboundProvisioningConnector;
 import org.wso2.carbon.identity.provisioning.IdentityProvisioningConstants;
+import org.wso2.carbon.identity.user.profile.mgt.UserFieldDTO;
+import org.wso2.carbon.identity.user.profile.mgt.UserProfileDTO;
 import org.wso2.carbon.user.api.Claim;
+import org.wso2.carbon.user.core.UserCoreConstants;
 import org.wso2.carbon.user.core.UserRealm;
 import org.wso2.carbon.user.core.UserStoreException;
+import org.wso2.carbon.user.core.UserStoreManager;
+import org.wso2.carbon.user.core.service.RealmService;
+import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
 
@@ -101,6 +109,7 @@ public class InweboProvisioningConnector extends AbstractOutboundProvisioningCon
                                 name, mail, phone, status, role, access, codeType, language, extraFields, p12file, p12password);
                         if (StringUtils.isNotEmpty(provisionedId) && !provisionedId.equals("0")) {
                             log.info("User creation in InWebo is done.");
+                            addProfile(login, phone, mail, firstName, name);
                         }
                     } else if (provisioningEntity.getOperation() == ProvisioningOperation.PUT) {
                         login = provisioningEntity.getAttributes().get(ClaimMapping
@@ -158,7 +167,6 @@ public class InweboProvisioningConnector extends AbstractOutboundProvisioningCon
             Util.setHttpsClientCert(p12file, p12password);
         } catch (Exception e) {
             throw new IdentityProvisioningException("Error while adding certificate", e);
-
         }
         try {
             UserCreation userCreation = new UserCreation();
@@ -179,7 +187,6 @@ public class InweboProvisioningConnector extends AbstractOutboundProvisioningCon
             Util.setHttpsClientCert(p12file, p12password);
         } catch (Exception e) {
             throw new IdentityProvisioningException("Error while adding certificate", e);
-
         }
         try {
             String loginId = provisioningEntity.getIdentifier().getIdentifier();
@@ -233,5 +240,91 @@ public class InweboProvisioningConnector extends AbstractOutboundProvisioningCon
             }
         }
         return reqClaims.toArray(new Claim[reqClaims.size()]);
+    }
+
+    public void addProfile(String login, String phone, String mail, String firstName, String name) {
+        if (StringUtils.isNotEmpty(login)) {
+            UserRealm userRealm = null;
+            try {
+                String tenantDomain = MultitenantUtils.getTenantDomain(login);
+                int tenantId = IdentityTenantUtil.getTenantId(tenantDomain);
+                RealmService realmService = IdentityTenantUtil.getRealmService();
+                userRealm = (UserRealm) realmService.getTenantUserRealm(tenantId);
+            } catch (Exception e) {
+            }
+            String username = MultitenantUtils.getTenantAwareUsername(String.valueOf(login));
+            if (userRealm != null) {
+                UserProfileDTO userprofile = new UserProfileDTO();
+                List<UserFieldDTO> userFields = new ArrayList<UserFieldDTO>();
+                Claim[] claims = new Claim[0];
+                try {
+                    claims = getAllSupportedClaims(userRealm, UserCoreConstants.DEFAULT_CARBON_DIALECT);
+                } catch (org.wso2.carbon.user.api.UserStoreException e) {
+
+                }
+                for (int j = 0; j < claims.length; j++) {
+                    Claim claim = claims[j];
+                    String claimUri = claim.getClaimUri();
+                    if (InweboConnectorConstants.PHONE_CLAIM.equals(claimUri)
+                            || InweboConnectorConstants.MAIL_CLAIM.equals(claimUri)
+                            || InweboConnectorConstants.LAST_NAME_CLAIM.equals(claimUri)
+                            || InweboConnectorConstants.FIRST_NAME_CLAIM.equals(claimUri)) {
+                        UserFieldDTO fieldDTO = new UserFieldDTO();
+                        if (InweboConnectorConstants.PHONE_CLAIM.equals(claimUri)) {
+                            fieldDTO.setFieldValue(phone);
+                        } else if (InweboConnectorConstants.MAIL_CLAIM.equals(claimUri)) {
+                            fieldDTO.setFieldValue(mail);
+                        } else if (InweboConnectorConstants.FIRST_NAME_CLAIM.equals(claimUri)) {
+                            fieldDTO.setFieldValue(firstName);
+                        } else if (InweboConnectorConstants.LAST_NAME_CLAIM.equals(claimUri)) {
+                            fieldDTO.setFieldValue(name);
+                        }
+                        fieldDTO.setClaimUri(claimUri);
+                        fieldDTO.setDisplayName(claim.getDisplayTag());
+                        fieldDTO.setRegEx(claim.getRegEx());
+                        fieldDTO.setRequired(claim.isRequired());
+                        fieldDTO.setDisplayOrder(claim.getDisplayOrder());
+                        fieldDTO.setCheckedAttribute(claim.isCheckedAttribute());
+                        fieldDTO.setReadOnly(claim.isReadOnly());
+                        userFields.add(userFields.size(), fieldDTO);
+                    }
+                }
+                userprofile.setFieldValues(userFields.toArray(new UserFieldDTO[userFields.size()]));
+
+                HashMap map = new HashMap();
+                UserFieldDTO[] newUserFields = userprofile.getFieldValues();
+                int len$ = newUserFields.length;
+                for (int i$ = 0; i$ < len$; ++i$) {
+                    UserFieldDTO data = newUserFields[i$];
+                    String claimURI = data.getClaimUri();
+                    String value = data.getFieldValue();
+                    if (!data.isReadOnly()) {
+                        if (value == "" && "http://wso2.org/claims/identity/otp".equals(claimURI)) {
+                            value = "false";
+                        }
+                        map.put(claimURI, value);
+                    }
+                }
+
+                if (userprofile.getProfileConifuration() != null) {
+                    map.put(InweboConnectorConstants.PROFILE_CONFIGURATION, userprofile.getProfileConifuration());
+                } else {
+                    map.put(InweboConnectorConstants.PROFILE_CONFIGURATION,
+                            InweboConnectorConstants.PROFILE_CONFIGURATION_DEFAULT);
+                }
+
+                UserStoreManager userStoreManager = null;
+                try {
+                    userStoreManager = userRealm.getUserStoreManager();
+                } catch (UserStoreException e) {
+                    log.error("Unable to get user store manager to update the profile:" + e.getMessage(), e);
+                }
+                try {
+                    userStoreManager.setUserClaimValues(username, map, userprofile.getProfileName());
+                } catch (UserStoreException e) {
+                    log.error("Unable to set user claim values while updating the profile: " + e.getMessage(), e);
+                }
+            }
+        }
     }
 }
