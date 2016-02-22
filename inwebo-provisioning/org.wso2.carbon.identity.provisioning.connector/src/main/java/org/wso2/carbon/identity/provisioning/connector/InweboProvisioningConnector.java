@@ -165,7 +165,7 @@ public class InweboProvisioningConnector extends AbstractOutboundProvisioningCon
             provisionedId = userCreation.invokeSOAP(userId, serviceId, login, firstName, name, mail, phone, status,
                     role, access, codeType, language, extraFields);
         } catch (IdentityProvisioningException e) {
-            throw new IdentityProvisioningException("Error while creating the user", e);
+            throw new IdentityProvisioningException("Error while creating the user in InWebo", e);
         }
         return provisionedId;
     }
@@ -209,7 +209,7 @@ public class InweboProvisioningConnector extends AbstractOutboundProvisioningCon
             UserDeletion UserDeletion = new UserDeletion();
             deletionStatus = UserDeletion.deleteUser(loginId, userId, serviceId);
         } catch (IdentityProvisioningException e) {
-            throw new IdentityProvisioningException("Error while creating the user", e);
+            throw new IdentityProvisioningException("Error while deleting the user from InWebo", e);
         }
         return deletionStatus;
     }
