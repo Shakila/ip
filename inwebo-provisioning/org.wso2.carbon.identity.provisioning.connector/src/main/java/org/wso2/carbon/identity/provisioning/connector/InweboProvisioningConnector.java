@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2015, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
+ *  Copyright (c) 2015-2016, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
  *
  *  WSO2 Inc. licenses this file to you under the Apache License,
  *  Version 2.0 (the "License"); you may not use this file except
@@ -24,6 +24,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.identity.application.common.model.ClaimMapping;
 import org.wso2.carbon.identity.application.common.model.Property;
+import org.wso2.carbon.identity.base.IdentityConstants;
 import org.wso2.carbon.identity.provisioning.ProvisioningOperation;
 import org.wso2.carbon.identity.provisioning.IdentityProvisioningException;
 import org.wso2.carbon.identity.provisioning.ProvisionedIdentifier;
@@ -31,7 +32,12 @@ import org.wso2.carbon.identity.provisioning.ProvisioningEntity;
 import org.wso2.carbon.identity.provisioning.ProvisioningEntityType;
 import org.wso2.carbon.identity.provisioning.AbstractOutboundProvisioningConnector;
 import org.wso2.carbon.identity.provisioning.IdentityProvisioningConstants;
+import org.wso2.carbon.user.api.Claim;
+import org.wso2.carbon.user.core.UserRealm;
+import org.wso2.carbon.user.core.UserStoreException;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 
 public class InweboProvisioningConnector extends AbstractOutboundProvisioningConnector {
@@ -60,78 +66,86 @@ public class InweboProvisioningConnector extends AbstractOutboundProvisioningCon
     @Override
     public ProvisionedIdentifier provision(ProvisioningEntity provisioningEntity)
             throws IdentityProvisioningException {
-        String provisionedId = null;
-        if (provisioningEntity != null) {
-            String login = provisioningEntity.getEntityName().toString();
-            String userId = configHolder.getValue(InweboConnectorConstants.INWEBO_USER_ID);
-            String serviceId = configHolder.getValue(InweboConnectorConstants.INWEBO_SERVICE_ID);
-            String p12file = configHolder.getValue(InweboConnectorConstants.INWEBO_P12FILE);
-            String p12password = configHolder.getValue(InweboConnectorConstants.INWEBO_P12PASSWORD);
-            String firstName = configHolder.getValue(InweboConnectorConstants.INWEBO_FIRSTNAME);
-            String name = configHolder.getValue(InweboConnectorConstants.INWEBO_NAME);
-            String mail = configHolder.getValue(InweboConnectorConstants.INWEBO_MAIL);
-            String phone = configHolder.getValue(InweboConnectorConstants.INWEBO_PHONENUMBER);
-            String status = configHolder.getValue(InweboConnectorConstants.INWEBO_STATUS);
-            String role = configHolder.getValue(InweboConnectorConstants.INWEBO_ROLE);
-            String access = configHolder.getValue(InweboConnectorConstants.INWEBO_ACCESS);
-            String codeType = configHolder.getValue(InweboConnectorConstants.INWEBO_CODETYPE);
-            String extraFields = StringUtils.isNotEmpty(configHolder.getValue(InweboConnectorConstants.INWEBO_EXTRAFIELDS))
-                    ? configHolder.getValue(InweboConnectorConstants.INWEBO_EXTRAFIELDS) : "";
-            String language = StringUtils.isNotEmpty(configHolder.getValue(InweboConnectorConstants.INWEBO_LANG))
-                    ? configHolder.getValue(InweboConnectorConstants.INWEBO_LANG)
-                    : InweboConnectorConstants.INWEBO_LANG_ENGLISH;
+        try {
+            String provisionedId = null;
+            if (provisioningEntity != null) {
+                String login = provisioningEntity.getEntityName().toString();
+                String userId = configHolder.getValue(InweboConnectorConstants.INWEBO_USER_ID);
+                String serviceId = configHolder.getValue(InweboConnectorConstants.INWEBO_SERVICE_ID);
+                String p12file = configHolder.getValue(InweboConnectorConstants.INWEBO_P12FILE);
+                String p12password = configHolder.getValue(InweboConnectorConstants.INWEBO_P12PASSWORD);
+                String firstName = configHolder.getValue(InweboConnectorConstants.INWEBO_FIRSTNAME);
+                String name = configHolder.getValue(InweboConnectorConstants.INWEBO_NAME);
+                String mail = configHolder.getValue(InweboConnectorConstants.INWEBO_MAIL);
+                String phone = configHolder.getValue(InweboConnectorConstants.INWEBO_PHONENUMBER);
+                String status = configHolder.getValue(InweboConnectorConstants.INWEBO_STATUS);
+                String role = configHolder.getValue(InweboConnectorConstants.INWEBO_ROLE);
+                String access = configHolder.getValue(InweboConnectorConstants.INWEBO_ACCESS);
+                String codeType = configHolder.getValue(InweboConnectorConstants.INWEBO_CODETYPE);
+                String extraFields = StringUtils.isNotEmpty(configHolder.getValue(InweboConnectorConstants.INWEBO_EXTRAFIELDS))
+                        ? configHolder.getValue(InweboConnectorConstants.INWEBO_EXTRAFIELDS) : "";
+                String language = StringUtils.isNotEmpty(configHolder.getValue(InweboConnectorConstants.INWEBO_LANG))
+                        ? configHolder.getValue(InweboConnectorConstants.INWEBO_LANG)
+                        : InweboConnectorConstants.INWEBO_LANG_ENGLISH;
 
-            if (provisioningEntity.isJitProvisioning() && !isJitProvisioningEnabled()) {
-                if (log.isDebugEnabled()) {
-                    log.debug("JIT provisioning disabled for inwebo connector");
+                if (provisioningEntity.isJitProvisioning() && !isJitProvisioningEnabled()) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("JIT provisioning disabled for inwebo connector");
+                    }
+                    return null;
                 }
-                return null;
-            }
-            if (provisioningEntity.getEntityType() == ProvisioningEntityType.USER) {
-                java.lang.System.setProperty(InweboConnectorConstants.AXIS2, InweboConnectorConstants.AXIS2_FILE);
-                if (provisioningEntity.getOperation() == ProvisioningOperation.POST) {
-                    provisionedId = createAUser(provisioningEntity, userId, serviceId, login, firstName,
-                            name, mail, phone, status, role, access, codeType, language, extraFields, p12file, p12password);
-                    if (StringUtils.isNotEmpty(provisionedId)) {
-                        log.info("User creation in InWebo is done.");
-                    }
-                } else if (provisioningEntity.getOperation() == ProvisioningOperation.PUT) {
-                    login = provisioningEntity.getAttributes().get(ClaimMapping
-                            .build(InweboConnectorConstants.USERNAME_CLAIM, null,
-                                    (String) null, false)).get(0);
-                    firstName = provisioningEntity.getAttributes().get(ClaimMapping
-                            .build(InweboConnectorConstants.FIRST_NAME_CLAIM, InweboConnectorConstants.FIRST_NAME_CLAIM,
-                                    (String) null, false)).get(0);
-                    name = provisioningEntity.getAttributes().get(ClaimMapping
-                            .build(InweboConnectorConstants.LAST_NAME_CLAIM, InweboConnectorConstants.LAST_NAME_CLAIM,
-                                    (String) null, false)).get(0);
-                    mail = provisioningEntity.getAttributes().get(ClaimMapping
-                            .build(InweboConnectorConstants.MAIL_CLAIM, InweboConnectorConstants.MAIL_CLAIM,
-                                    (String) null, false)).get(0);
-                    phone = provisioningEntity.getAttributes().get(ClaimMapping
-                            .build(InweboConnectorConstants.PHONE_CLAIM, InweboConnectorConstants.PHONE_CLAIM,
-                                    (String) null, false)).get(0);
-                    boolean updationStatus = updateAUser(provisioningEntity, userId, serviceId, login, firstName, name,
-                            mail, phone, status, role, extraFields, p12file, p12password);
-                    if (updationStatus) {
-                        log.info("User updation in InWebo is done.");
-                    }
-                } else if (provisioningEntity.getOperation() == ProvisioningOperation.DELETE) {
-                    boolean deletionStatus = deleteUser(provisioningEntity, serviceId, userId, p12file, p12password);
-                    if (deletionStatus) {
-                        log.info("User deletion in InWebo is done.");
+                if (provisioningEntity.getEntityType() == ProvisioningEntityType.USER) {
+                    java.lang.System.setProperty(InweboConnectorConstants.AXIS2, InweboConnectorConstants.AXIS2_FILE);
+                    if (provisioningEntity.getOperation() == ProvisioningOperation.POST) {
+                        provisionedId = createAUser(provisioningEntity, userId, serviceId, login, firstName,
+                                name, mail, phone, status, role, access, codeType, language, extraFields, p12file, p12password);
+                        if (StringUtils.isNotEmpty(provisionedId) && !provisionedId.equals("0")) {
+                            log.info("User creation in InWebo is done.");
+                        }
+                    } else if (provisioningEntity.getOperation() == ProvisioningOperation.PUT) {
+                        login = provisioningEntity.getAttributes().get(ClaimMapping
+                                .build(InweboConnectorConstants.USERNAME_CLAIM, null,
+                                        (String) null, false)).get(0);
+                        firstName = provisioningEntity.getAttributes().get(ClaimMapping
+                                .build(InweboConnectorConstants.FIRST_NAME_CLAIM, InweboConnectorConstants.FIRST_NAME_CLAIM,
+                                        (String) null, false)).get(0);
+                        name = provisioningEntity.getAttributes().get(ClaimMapping
+                                .build(InweboConnectorConstants.LAST_NAME_CLAIM, InweboConnectorConstants.LAST_NAME_CLAIM,
+                                        (String) null, false)).get(0);
+                        mail = provisioningEntity.getAttributes().get(ClaimMapping
+                                .build(InweboConnectorConstants.MAIL_CLAIM, InweboConnectorConstants.MAIL_CLAIM,
+                                        (String) null, false)).get(0);
+                        phone = provisioningEntity.getAttributes().get(ClaimMapping
+                                .build(InweboConnectorConstants.PHONE_CLAIM, InweboConnectorConstants.PHONE_CLAIM,
+                                        (String) null, false)).get(0);
+
+                        boolean updationStatus = updateAUser(provisioningEntity, userId, serviceId, login, firstName, name,
+                                mail, phone, status, role, extraFields, p12file, p12password);
+                        if (updationStatus) {
+                            log.info("User updation in InWebo is done.");
+                        }
+                    } else if (provisioningEntity.getOperation() == ProvisioningOperation.DELETE) {
+                        boolean deletionStatus = deleteUser(provisioningEntity, serviceId, userId, p12file, p12password);
+                        if (deletionStatus) {
+                            log.info("User deletion from InWebo is done.");
+                        }
+                    } else {
+                        throw new IdentityProvisioningException("Unsupported provisioning opertaion.");
                     }
                 } else {
                     throw new IdentityProvisioningException("Unsupported provisioning opertaion.");
                 }
-            } else {
-                throw new IdentityProvisioningException("Unsupported provisioning opertaion.");
             }
+            // creates a provisioned identifier for the provisioned user.
+            ProvisionedIdentifier identifier = new ProvisionedIdentifier();
+            if (StringUtils.isNotEmpty(provisionedId) && !provisionedId.equals("0")) {
+                identifier.setIdentifier(provisionedId);
+            }
+            return identifier;
+        } catch (IdentityProvisioningException e) {
+            log.error(e);
+            return null;
         }
-        // creates a provisioned identifier for the provisioned user.
-        ProvisionedIdentifier identifier = new ProvisionedIdentifier();
-        identifier.setIdentifier(provisionedId);
-        return identifier;
     }
 
     private String createAUser(ProvisioningEntity provisioningEntity, String userId, String serviceId, String login,
@@ -147,10 +161,10 @@ public class InweboProvisioningConnector extends AbstractOutboundProvisioningCon
 
         }
         try {
-            UserCreation userCreation = new UserCreation(userId, serviceId, login, firstName, name, mail, phone, status,
+            UserCreation userCreation = new UserCreation();
+            provisionedId = userCreation.invokeSOAP(userId, serviceId, login, firstName, name, mail, phone, status,
                     role, access, codeType, language, extraFields);
-            provisionedId = userCreation.invokeSOAP();
-        } catch (Exception e) {
+        } catch (IdentityProvisioningException e) {
             throw new IdentityProvisioningException("Error while creating the user", e);
         }
         return provisionedId;
@@ -169,10 +183,10 @@ public class InweboProvisioningConnector extends AbstractOutboundProvisioningCon
         }
         try {
             String loginId = provisioningEntity.getIdentifier().getIdentifier();
-            UserUpdation userUpdation = new UserUpdation(userId, serviceId, loginId, login, firstName, name, mail,
+            UserUpdation userUpdation = new UserUpdation();
+            updationStatus = userUpdation.invokeSOAP(userId, serviceId, loginId, login, firstName, name, mail,
                     phone, status, role, extraFields);
-            updationStatus = userUpdation.invokeSOAP();
-        } catch (Exception e) {
+        } catch (IdentityProvisioningException e) {
             throw new IdentityProvisioningException("Error while updating the user", e);
         }
         return updationStatus;
@@ -192,14 +206,32 @@ public class InweboProvisioningConnector extends AbstractOutboundProvisioningCon
         }
         try {
             String loginId = provisioningEntity.getIdentifier().getIdentifier();
-            UserDeletion UserDeletion = new UserDeletion(loginId, userId, serviceId);
-            deletionStatus = UserDeletion.deleteUser();
+            UserDeletion UserDeletion = new UserDeletion();
+            deletionStatus = UserDeletion.deleteUser(loginId, userId, serviceId);
         } catch (IdentityProvisioningException e) {
             throw new IdentityProvisioningException("Error while creating the user", e);
         }
         return deletionStatus;
     }
+
+    /**
+     * @return
+     * @throws UserStoreException
+     */
+    private Claim[] getAllSupportedClaims(UserRealm realm, String dialectUri)
+            throws org.wso2.carbon.user.api.UserStoreException {
+        org.wso2.carbon.user.api.ClaimMapping[] claims = null;
+        List<Claim> reqClaims = null;
+
+        claims = realm.getClaimManager().getAllSupportClaimMappingsByDefault();
+        reqClaims = new ArrayList<Claim>();
+        for (int i = 0; i < claims.length; i++) {
+            if (dialectUri.equals(claims[i].getClaim().getDialectURI()) && (claims[i] != null && claims[i].getClaim().getDisplayTag() != null
+                    && !claims[i].getClaim().getClaimUri().equals(IdentityConstants.CLAIM_PPID))) {
+
+                reqClaims.add((Claim) claims[i].getClaim());
+            }
+        }
+        return reqClaims.toArray(new Claim[reqClaims.size()]);
+    }
 }
-
-
-
