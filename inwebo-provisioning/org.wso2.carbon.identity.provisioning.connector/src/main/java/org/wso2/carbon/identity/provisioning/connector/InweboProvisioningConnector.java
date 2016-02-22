@@ -221,27 +221,6 @@ public class InweboProvisioningConnector extends AbstractOutboundProvisioningCon
         return deletionStatus;
     }
 
-    /**
-     * @return
-     * @throws UserStoreException
-     */
-    private Claim[] getAllSupportedClaims(UserRealm realm, String dialectUri)
-            throws org.wso2.carbon.user.api.UserStoreException {
-        org.wso2.carbon.user.api.ClaimMapping[] claims = null;
-        List<Claim> reqClaims = null;
-
-        claims = realm.getClaimManager().getAllSupportClaimMappingsByDefault();
-        reqClaims = new ArrayList<Claim>();
-        for (int i = 0; i < claims.length; i++) {
-            if (dialectUri.equals(claims[i].getClaim().getDialectURI()) && (claims[i] != null && claims[i].getClaim().getDisplayTag() != null
-                    && !claims[i].getClaim().getClaimUri().equals(IdentityConstants.CLAIM_PPID))) {
-
-                reqClaims.add((Claim) claims[i].getClaim());
-            }
-        }
-        return reqClaims.toArray(new Claim[reqClaims.size()]);
-    }
-
     public void addProfile(String login, String phone, String mail, String firstName, String name) {
         if (StringUtils.isNotEmpty(login)) {
             UserRealm userRealm = null;
